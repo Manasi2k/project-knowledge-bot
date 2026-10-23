@@ -1,0 +1,9 @@
+python-dotenv
+requests
+pymupdf
+python-docx
+pandas 
+openpyxl
+python-pptx        #for pptx testing
+pytesseract        #OCR
+pillow              #OCR
