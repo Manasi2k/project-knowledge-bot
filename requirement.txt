@@ -1,5 +1,5 @@
 python-dotenv
-python==3.12
+#python==3.12
 requests
 pymupdf
 python-docx
@@ -8,3 +8,13 @@ openpyxl
 python-pptx        #for pptx testing
 pytesseract        #OCR
 pillow              #OCR
+
+#Retrievals
+langchain-text-splitters   #for chunking
+langchain-chroma
+langchain-huggingface
+sentence-transformers
+
+
+
+langchain-groq

@@ -1,0 +1,10 @@
+{
+  "period": "2024-05",
+  "events": [
+    {"name": "payment_created", "count": 184220, "avg_latency_ms": 212},
+    {"name": "payment_captured", "count": 179940, "avg_latency_ms": 340},
+    {"name": "payment_failed", "count": 4280, "avg_latency_ms": 198},
+    {"name": "refund_created", "count": 3110, "avg_latency_ms": 265},
+    {"name": "token_issued", "count": 902331, "avg_latency_ms": 41}
+  ]
+}

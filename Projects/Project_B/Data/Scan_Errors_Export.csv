@@ -1,0 +1,9 @@
+date,warehouse,error_type,count
+2024-05-01,Leeds,barcode_unreadable,42
+2024-05-01,Bristol,barcode_unreadable,18
+2024-05-01,Glasgow,duplicate_scan,7
+2024-05-02,Leeds,barcode_unreadable,37
+2024-05-02,Bristol,network_timeout,11
+2024-05-02,Glasgow,barcode_unreadable,9
+2024-05-03,Leeds,duplicate_scan,5
+2024-05-03,Bristol,barcode_unreadable,21

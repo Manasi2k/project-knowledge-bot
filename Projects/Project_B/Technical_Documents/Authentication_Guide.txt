@@ -1,0 +1,36 @@
+PROJECT B - AUTHENTICATION GUIDE
+
+1. SUMMARY
+Project B uses server-side session cookies stored in Redis. No JWT is used anywhere in the system.
+Sessions expire after 30 minutes of inactivity.
+
+2. WHY SESSIONS AND NOT TOKENS
+The system is used only from the corporate network by known staff on managed devices. A server-side session
+can be revoked instantly by deleting the Redis key, which is important when an operative leaves mid-shift.
+Stateless tokens were considered and rejected because immediate revocation was a stated requirement.
+
+3. LOGIN FLOW
+a) The user submits username and password to /accounts/login/.
+b) Django verifies the password using PBKDF2 with a per-user salt.
+c) On success Django creates a session, stores it in Redis under a random 32 character key, and sends the key
+   to the browser in a cookie named kbsession (HttpOnly, Secure, SameSite=Lax).
+d) Each subsequent request carries the cookie; Django loads the session from Redis.
+
+4. HANDHELD DEVICES
+Scanner devices authenticate with a device certificate plus the operative's PIN. After a successful PIN check
+the API issues the same kind of session cookie. Devices are enrolled by an administrator and can be disabled
+centrally.
+
+5. ROLES
+Operative: scan and view stock. Supervisor: reports and adjustment approval. Administrator: user and location
+management. Roles are checked on every request by Django permission classes.
+
+6. SESSION POLICY
+- Idle timeout: 30 minutes.
+- Absolute lifetime: 12 hours (one shift).
+- Maximum two concurrent sessions per user.
+- Five failed logins lock the account for 10 minutes.
+
+7. KNOWN LIMITATIONS
+Redis is a single point of failure for logins; if it is down, nobody can sign in. A replica with manual failover
+exists but failover is not automatic.
