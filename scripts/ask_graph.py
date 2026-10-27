@@ -1,10 +1,16 @@
+import os
 import sys
 
+from kb.access import login
 from kb.graph import build_graph
 
-question = " ".join(sys.argv[1:])
-result = build_graph().invoke({"question": question})
-print(f"[route: {result.get('route')}]\n")
+user, question = sys.argv[1], " ".join(sys.argv[2:])
+ctx = login(user, os.getenv(f"{user.upper()}_APP_PASSWORD", ""))
+if ctx is None:
+    sys.exit(f"Login failed for {user}")
+
+result = build_graph(ctx).invoke({"question": question})
+print(f"[user: {user} | projects: {ctx.projects} | route: {result.get('route')}]\n")
 print(result["answer"])
 if result.get("sources"):
     print("\nSources:")

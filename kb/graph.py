@@ -1,6 +1,6 @@
 """LangGraph workflow: decide how to answer a question, then answer it with sources."""
-import os
 import json
+import os
 from typing import Literal, Optional, TypedDict
 
 from dotenv import load_dotenv
@@ -8,10 +8,9 @@ from langchain_groq import ChatGroq
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
+from kb.access import UserContext, can_read, project_of
 from kb.answer import answer
-from kb.config import load_nextcloud_settings
 from kb.files import find_files
-from kb.nextcloud_client import NextcloudClient
 from kb.sheets import aggregate, describe
 
 load_dotenv()
@@ -65,11 +64,6 @@ Catalog:
 Question: {question}"""
 
 
-def _client() -> tuple[NextcloudClient, str]:
-    settings = load_nextcloud_settings()
-    return NextcloudClient(settings), settings.base_url
-
-
 def _llm() -> ChatGroq:
     return ChatGroq(model=MODEL, temperature=0)
 
@@ -96,46 +90,48 @@ def route_node(state: State) -> State:
         return {"route": "semantic", "filename": "", "project": ""}   # safe default
 
 
-def semantic_node(state: State) -> State:
+def semantic_node(state: State, ctx: UserContext) -> State:
     try:
-        _, base = _client()
-        text, sources = answer(state["question"], base)
+        text, sources = answer(state["question"], ctx)
         return {"answer": text, "sources": sources}
     except Exception as exc:
         return {"answer": "Sorry, I could not search the documents right now.", "error": f"{type(exc).__name__}: {exc}"}
 
 
-def file_node(state: State) -> State:
+def _visible(ctx: UserContext, entries):
+    """Keep only files in this user's projects that Nextcloud shows them right now."""
+    return [e for e in entries if project_of(e.path) in ctx.projects and can_read(ctx.client, e.path, e.file_id)]
+
+
+def file_node(state: State, ctx: UserContext) -> State:
     try:
-        client, base = _client()
         name = state.get("filename") or ""
         if not name:
             return {"answer": "Which file are you looking for? Please give a file name."}
-        hits = find_files(client, name, state.get("project") or None)
+        hits = _visible(ctx, find_files(ctx.service, name, state.get("project") or None))
         if not hits:
             where = f" in {state['project']}" if state.get("project") else ""
             return {"answer": f"No file matching '{name}'{where} was found."}
         lines = [f"Found {len(hits)} file(s) matching '{name}':"] + [f"- {e.path}" for e in hits]
         sources = [{"n": i, "path": e.path, "location": "file", "method": "file search",
-                    "url": f"{base}/f/{e.file_id}"} for i, e in enumerate(hits, 1)]
+                    "url": f"{ctx.base_url}/f/{e.file_id}"} for i, e in enumerate(hits, 1)]
         return {"answer": "\n".join(lines), "sources": sources}
     except Exception as exc:
         return {"answer": "Sorry, I could not search the file system right now.", "error": f"{type(exc).__name__}: {exc}"}
 
 
-def spreadsheet_node(state: State) -> State:
+def spreadsheet_node(state: State, ctx: UserContext) -> State:
     try:
-        client, base = _client()
         project = state.get("project") or None
-        books = find_files(client, ".xlsx", project)
+        books = _visible(ctx, find_files(ctx.service, ".xlsx", project))
         if not books:
             return {"answer": "No Excel workbooks were found" + (f" in {project}." if project else ".")}
-        projects = sorted({e.path.split("/")[1] for e in books})
+        projects = sorted({project_of(e.path) for e in books})
         if not project and len(projects) > 1:
             return {"answer": f"Several projects have workbooks ({', '.join(projects)}). Which project do you mean?"}
         data, catalog = {}, []
         for e in books:
-            data[e.path] = client.download(e.path)
+            data[e.path] = ctx.client.download(e.path.removeprefix("Projects/"))   # read as the user
             catalog += [f"{e.path} | {line}" for line in describe(data[e.path])]
         plan = _structured(SheetPlan, PLANNER_PROMPT.format(catalog="\n".join(catalog), question=state["question"]))
         if not plan.feasible or plan.workbook not in data:
@@ -151,17 +147,17 @@ def spreadsheet_node(state: State) -> State:
                 f"{len(r.rows)} row(s) used; calculated by Python, not by the language model)")
         entry = next(e for e in books if e.path == plan.workbook)
         return {"answer": text, "sources": [{"n": 1, "path": plan.workbook, "location": f"sheet {r.sheet}",
-                                             "method": "structured", "url": f"{base}/f/{entry.file_id}"}]}
+                                             "method": "structured", "url": f"{ctx.base_url}/f/{entry.file_id}"}]}
     except Exception as exc:
         return {"answer": "Sorry, I could not calculate that from the spreadsheet.", "error": f"{type(exc).__name__}: {exc}"}
 
 
-def build_graph():
+def build_graph(ctx: UserContext):
     g = StateGraph(State)
     g.add_node("route", route_node)
-    g.add_node("semantic", semantic_node)
-    g.add_node("file_search", file_node)
-    g.add_node("spreadsheet", spreadsheet_node)
+    g.add_node("semantic", lambda s: semantic_node(s, ctx))
+    g.add_node("file_search", lambda s: file_node(s, ctx))
+    g.add_node("spreadsheet", lambda s: spreadsheet_node(s, ctx))
     g.add_edge(START, "route")
     g.add_conditional_edges("route", lambda s: s["route"], ["semantic", "file_search", "spreadsheet"])
     for name in ("semantic", "file_search", "spreadsheet"):
