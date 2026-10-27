@@ -33,7 +33,23 @@ def aggregate(data: bytes, sheet: str, column: str, op: str = "sum",
         if col not in df.columns:
             raise ValueError(f"unknown column '{col}'; this sheet has {list(df.columns)}")
     for col, val in (where or {}).items():
-        df = df[df[col] == val]
+        df = df[df[col].astype(str) == str(val)]
     value = getattr(df[column], op)()
     value = value.item() if hasattr(value, "item") else value
     return AggResult(value=value, rows=[int(i) + 2 for i in df.index], sheet=sheet, column=column)
+
+
+def describe(data: bytes) -> list[str]:
+    """One line per sheet listing columns, plus the values of short text columns."""
+    lines = []
+    for sheet in sheet_names(data):
+        df = read_sheet(data, sheet)
+        cols = []
+        for c in df.columns:
+            s = df[c].dropna()
+            if 0 < s.nunique() <= 8 and not pd.api.types.is_numeric_dtype(s):
+                cols.append(f"{c} (values: {', '.join(sorted(map(str, s.unique())))})")
+            else:
+                cols.append(str(c))
+        lines.append(f"sheet '{sheet}': " + "; ".join(cols))
+    return lines
