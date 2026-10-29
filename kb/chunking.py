@@ -1,10 +1,12 @@
 import os
 
 from langchain_text_splitters import Language, RecursiveCharacterTextSplitter
-
+from kb.vectorstore import EMBEDDING_MODEL
 from kb.extraction import ExtractionResult
 
 CHUNK_SIZE, CHUNK_OVERLAP = 1000, 150
+EXTRACTION_VERSION = 2   # bump this whenever kb/extraction.py changes what text it produces
+INDEX_VERSION = f"x{EXTRACTION_VERSION}|{EMBEDDING_MODEL}|c{CHUNK_SIZE}-{CHUNK_OVERLAP}"
 
 _plain = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
 _python = RecursiveCharacterTextSplitter.from_language(
@@ -42,6 +44,7 @@ def chunk_file(entry, result: ExtractionResult):
                 "modified": entry.modified or "",
                 "segment": seg_i,
                 "chunk": chunk_i,
+                "index_version": INDEX_VERSION,
             })
             ids.append(f"{entry.file_id}-{seg_i}-{chunk_i}")
     return texts, metas, ids

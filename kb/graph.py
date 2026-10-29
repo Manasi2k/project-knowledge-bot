@@ -10,7 +10,9 @@ from pydantic import BaseModel, Field
 
 from kb.access import UserContext, can_read, project_of
 from kb.answer import answer
+from kb.chat import small_talk
 from kb.files import find_files
+from kb.guardrails import redact
 from kb.sheets import aggregate, describe
 
 load_dotenv()
@@ -19,7 +21,7 @@ MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 class State(TypedDict, total=False):
     question: str
-    route: str            # semantic | file_search | spreadsheet
+    route: str            # semantic | file_search | spreadsheet | chitchat
     filename: str         # set by the router for file_search
     project: str          # set by the router, e.g. Project_B
     answer: str
@@ -28,7 +30,7 @@ class State(TypedDict, total=False):
 
 
 class Route(BaseModel):
-    route: Literal["semantic", "file_search", "spreadsheet"]
+    route: Literal["semantic", "file_search", "spreadsheet", "chitchat"]
     filename: Optional[str] = Field(None, description="File name or part of it, for file_search only")
     project: Optional[str] = Field(None, description="Project in the form Project_A, only if the question names one")
 
@@ -48,8 +50,9 @@ class SheetPlan(BaseModel):
 
 
 ROUTER_PROMPT = """Choose how to answer a question about company project documents.
-- file_search: the person wants to locate or open a file by name, or asks where a file is. Put the file name (or part of it) in filename.
+- file_search: the person wants to find, open, download or see a file (a PDF, image, presentation, document, spreadsheet) by name, or asks where a file is. Put the file name (or part of it) in filename.
 - spreadsheet: the question asks for a number to be looked up or calculated from a spreadsheet or workbook (revenue, totals, averages, counts).
+- chitchat: a greeting, a thank-you, a statement about the person themself (for example "my name is Sam"), or a question about what the assistant can do. No documents are needed.
 - semantic: everything else (explanations, summaries, which project used something, what a document says).
 If a project is named, write it like Project_A. Question: {question}"""
 
@@ -93,9 +96,17 @@ def route_node(state: State) -> State:
 def semantic_node(state: State, ctx: UserContext) -> State:
     try:
         text, sources = answer(state["question"], ctx)
-        return {"answer": text, "sources": sources}
+        return {"answer": redact(text), "sources": sources}
     except Exception as exc:
         return {"answer": "Sorry, I could not search the documents right now.", "error": f"{type(exc).__name__}: {exc}"}
+
+
+def chitchat_node(state: State, ctx: UserContext) -> State:
+    try:
+        return {"answer": small_talk(state["question"], ctx.display_name or ctx.username)}
+    except Exception as exc:
+        return {"answer": "Hi! I'm having trouble reaching my language model right now. Please try again in a moment.",
+                "error": f"{type(exc).__name__}: {exc}"}
 
 
 def _visible(ctx: UserContext, entries):
@@ -108,13 +119,21 @@ def file_node(state: State, ctx: UserContext) -> State:
         name = state.get("filename") or ""
         if not name:
             return {"answer": "Which file are you looking for? Please give a file name."}
-        hits = _visible(ctx, find_files(ctx.service, name, state.get("project") or None))
+        hits = []
+        for candidate in dict.fromkeys([name, name.replace(" ", "_")]):   # "architecture diagram" also tries architecture_diagram
+            hits = _visible(ctx, find_files(ctx.service, candidate, state.get("project") or None))
+            if hits:
+                break
         if not hits:
             where = f" in {state['project']}" if state.get("project") else ""
-            return {"answer": f"No file matching '{name}'{where} was found."}
-        lines = [f"Found {len(hits)} file(s) matching '{name}':"] + [f"- {e.path}" for e in hits]
+            return {"answer": f"I couldn't find a file matching \"{name}\"{where} in the projects you can access. "
+                              "Try part of the file name, or tell me which project to look in."}
+        intro = (f'I found **{len(hits)} files** matching "{name}":' if len(hits) > 1
+                 else "I found the file you asked for:")
+        lines = [intro, ""] + [f"- **{e.name}** in `{e.path.removeprefix('Projects/')}`" for e in hits]
+        lines += ["", "You can download or preview them below, or open them in Nextcloud."]
         sources = [{"n": i, "path": e.path, "location": "file", "method": "file search",
-                    "url": f"{ctx.base_url}/f/{e.file_id}"} for i, e in enumerate(hits, 1)]
+                    "url": f"{ctx.base_url}/f/{e.file_id}", "size": e.size} for i, e in enumerate(hits, 1)]
         return {"answer": "\n".join(lines), "sources": sources}
     except Exception as exc:
         return {"answer": "Sorry, I could not search the file system right now.", "error": f"{type(exc).__name__}: {exc}"}
@@ -128,7 +147,7 @@ def spreadsheet_node(state: State, ctx: UserContext) -> State:
             return {"answer": "No Excel workbooks were found" + (f" in {project}." if project else ".")}
         projects = sorted({project_of(e.path) for e in books})
         if not project and len(projects) > 1:
-            return {"answer": f"Several projects have workbooks ({', '.join(projects)}). Which project do you mean?"}
+            return {"answer": f"I found workbooks in several projects ({', '.join(projects)}). Which project should I use?"}
         data, catalog = {}, []
         for e in books:
             data[e.path] = ctx.client.download(e.path.removeprefix("Projects/"))   # read as the user
@@ -141,10 +160,14 @@ def spreadsheet_node(state: State, ctx: UserContext) -> State:
         if not r.rows:
             return {"answer": f"No rows matched {where} on sheet '{plan.sheet}' of {plan.workbook}."}
         value = f"{r.value:,.0f}" if float(r.value).is_integer() else f"{r.value:,.2f}"
-        cond = f" where {', '.join(f'{k}={v}' for k, v in where.items())}" if where else ""
-        text = (f"{plan.op} of {r.column}{cond} = {value}\n"
-                f"(workbook {plan.workbook}, sheet '{r.sheet}', spreadsheet rows {r.rows[0]}-{r.rows[-1]}, "
-                f"{len(r.rows)} row(s) used; calculated by Python, not by the language model)")
+        label = {"sum": "total", "mean": "average", "min": "lowest value", "max": "highest value",
+                 "count": "count"}[plan.op]
+        cond = (" for " + ", ".join(f"**{v}**" for v in where.values())) if where else ""
+        rows = f"row {r.rows[0]}" if len(r.rows) == 1 else f"rows {r.rows[0]}-{r.rows[-1]}"
+        text = (f"The {label} of **{r.column}**{cond} is **{value}**.\n\n"
+                f"I calculated it from the *{r.sheet}* sheet of `{plan.workbook.removeprefix('Projects/')}` "
+                f"({rows}, {len(r.rows)} row{'s' if len(r.rows) != 1 else ''} used). "
+                "Python did the arithmetic, not the AI, so the number is exact.")
         entry = next(e for e in books if e.path == plan.workbook)
         return {"answer": text, "sources": [{"n": 1, "path": plan.workbook, "location": f"sheet {r.sheet}",
                                              "method": "structured", "url": f"{ctx.base_url}/f/{entry.file_id}"}]}
@@ -155,11 +178,12 @@ def spreadsheet_node(state: State, ctx: UserContext) -> State:
 def build_graph(ctx: UserContext):
     g = StateGraph(State)
     g.add_node("route", route_node)
+    g.add_node("chitchat", lambda s: chitchat_node(s, ctx))
     g.add_node("semantic", lambda s: semantic_node(s, ctx))
     g.add_node("file_search", lambda s: file_node(s, ctx))
     g.add_node("spreadsheet", lambda s: spreadsheet_node(s, ctx))
     g.add_edge(START, "route")
-    g.add_conditional_edges("route", lambda s: s["route"], ["semantic", "file_search", "spreadsheet"])
-    for name in ("semantic", "file_search", "spreadsheet"):
+    g.add_conditional_edges("route", lambda s: s["route"], ["semantic", "file_search", "spreadsheet", "chitchat"])
+    for name in ("semantic", "file_search", "spreadsheet", "chitchat"):
         g.add_edge(name, END)
     return g.compile()

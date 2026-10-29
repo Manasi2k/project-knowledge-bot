@@ -1,13 +1,9 @@
-# Python-generated files
+.venv/
+.env
 __pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
-
-# Virtual environments
-.venv
-.env 
+*.pyc
 chroma_db/
-*.pyc 
+chat_history.db
+sync_log.jsonl
+sync_failures.json
+.pytest_cache/

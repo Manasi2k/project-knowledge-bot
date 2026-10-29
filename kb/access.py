@@ -1,6 +1,8 @@
 """Ask Nextcloud what a given user may see. Nextcloud decides, we never guess."""
 from dataclasses import dataclass
 
+import requests
+
 from kb.config import NextcloudSettings, load_nextcloud_settings
 from kb.nextcloud_client import NextcloudClient, NextcloudError
 
@@ -14,6 +16,7 @@ class UserContext:
     service: NextcloudClient     # kb_service: server-side only, never shown to users
     projects: list[str]          # projects this user could see at login
     base_url: str
+    display_name: str = ""       # the name on their Nextcloud account, e.g. "Manasi"
 
 
 def project_of(path: str) -> str:
@@ -58,10 +61,22 @@ def can_read(user_client: NextcloudClient, kb_path: str, file_id: str | None = N
     return False
 
 
+def fetch_display_name(base_url: str, username: str, app_password: str) -> str:
+    """The name on the person's Nextcloud account (OCS user metadata). Falls back to the username."""
+    try:
+        resp = requests.get(f"{base_url}/ocs/v1.php/cloud/users/{username}", params={"format": "json"},
+                            headers={"OCS-APIRequest": "true", "Accept": "application/json"},
+                            auth=(username, app_password), timeout=10)
+        return resp.json()["ocs"]["data"].get("displayname") or username
+    except Exception:
+        return username
+
+
 def login(username: str, app_password: str) -> UserContext | None:
     settings = load_nextcloud_settings()
     client = authenticate(settings.base_url, username, app_password)
     if client is None:
         return None
     service = NextcloudClient(settings)
-    return UserContext(username, client, service, allowed_projects(client, service), settings.base_url)
+    return UserContext(username, client, service, allowed_projects(client, service), settings.base_url,
+                       fetch_display_name(settings.base_url, username, app_password))

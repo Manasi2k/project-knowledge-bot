@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 
@@ -6,6 +8,7 @@ PERSIST_DIR = "chroma_db"
 COLLECTION = "project_chunks"
 
 
+@lru_cache(maxsize=1)
 def get_store() -> Chroma:
     return Chroma(
         collection_name=COLLECTION,
