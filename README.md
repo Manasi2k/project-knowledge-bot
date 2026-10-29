@@ -36,6 +36,7 @@ Employee --> Streamlit chat (signs in with their Nextcloud account)
 Prerequisites: Python 3.12, [uv](https://docs.astral.sh/uv/), Docker, Tesseract OCR, a free [Groq](https://console.groq.com) API key.
 
 1. `git clone <repo> && cd <repo> && uv sync`
+Activate the environment (Windows Git Bash: `source .venv/Scripts/activate`; macOS/Linux: `source .venv/bin/activate`), or put `uv run` in front of every `python` command below.
 2. `cp .env.example .env` and fill in `GROQ_API_KEY` and `TESSERACT_CMD` (on Windows the UB Mannheim Tesseract build installs to `C:/Program Files/Tesseract-OCR/tesseract.exe`).
 3. `docker compose up -d`, then open http://localhost:8080. If the installer appears, create an admin account and keep SQLite.
 4. In Nextcloud, create accounts `kb_service`, `alice` and `bob`. Log in as each, then **Personal settings > Security > Create new app password**. Put `kb_service`'s into `.env` as `NEXTCLOUD_APP_PASSWORD`.
