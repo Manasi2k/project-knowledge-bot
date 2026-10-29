@@ -48,6 +48,7 @@ Activate the environment (Windows Git Bash: `source .venv/Scripts/activate`; mac
 To keep the index up to date: `python -m scripts.sync_index --watch 120`.
 
 ## Tests
+- `pip install pytest` install pytest library 
 - `python -m pytest -q` runs 20 unit tests with no server needed.
 - `python -m scripts.eval_retrieval` checks that 9 questions find the right file.
 - `python -m scripts.test_permissions` (needs `ALICE_APP_PASSWORD` and `BOB_APP_PASSWORD` in `.env`) checks that each user only gets their own projects' content.
