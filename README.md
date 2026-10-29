@@ -2,7 +2,7 @@
 
 Ask questions in plain English about company project files and get answers grounded in the real documents, with sources. Each person only gets answers from the projects they are allowed to see.
 
-<screenshot of the chat page here>
+![Chat page](docs/chat.png)
 
 ## What it does
 - Searches PDFs, Word, Excel, PowerPoint, text, code and images (OCR for scans and photos).
@@ -53,6 +53,7 @@ To keep the index up to date: `python -m scripts.sync_index --watch 120`.
 - `python -m scripts.test_revocation` removes access mid-session and checks that nothing leaks.
 
 ## Results (31-file synthetic dataset)
+![Permission tests](docs/permissions.png)
 | Check | Result |
 |---|---|
 | Files fully extracted | 30 of 31 (the last is an Excel chart, reported as unread) |
