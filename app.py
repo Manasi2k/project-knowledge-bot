@@ -8,6 +8,7 @@ from kb.chat import condense, identity_answer
 from kb.graph import build_graph
 from kb.guardrails import check_question, rate_limited, redact
 from kb.history import add_message, delete_chat, list_chats, load_messages, new_chat, purge_old
+from kb.llm import text_of
 from kb.vectorstore import get_store
 
 logging.basicConfig(level=logging.INFO)
@@ -99,8 +100,14 @@ def run_graph(graph, question: str, box) -> dict:
             final = data
         elif mode == "messages":
             chunk, meta = data
-            if meta.get("langgraph_node") in ("semantic", "chitchat") and chunk.content:
-                streamed += chunk.content
+
+            # -------------------Local------------------
+            # if meta.get("langgraph_node") in ("semantic", "chitchat") and chunk.content:
+            #     streamed += chunk.content
+
+            #-----------------GCP------------------------
+            if meta.get("langgraph_node") in ("semantic", "chitchat") and text_of(chunk.content):
+                streamed += text_of(chunk.content)
                 box.markdown(redact(streamed) + "▌")
     return final or {"answer": "Sorry, something went wrong.", "error": "workflow returned no result"}
 

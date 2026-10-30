@@ -2,7 +2,10 @@ import os
 import re
 
 from dotenv import load_dotenv
-from langchain_groq import ChatGroq
+#this is for local running
+#from langchain_groq import ChatGroq
+
+from kb.llm import get_llm,text_of  #for gcp
 
 from kb.access import UserContext
 from kb.retrieval import retrieve
@@ -39,11 +42,24 @@ def answer(question: str, ctx: UserContext) -> tuple[str, list[dict]]:
         blocks.append(f"[{i}] {m['path']} - {m['location']}{tag}\n{body}")
         sources.append({"n": i, "path": m["path"], "location": m["location"], "method": m["method"],
                         "distance": distance, "url": f"{ctx.base_url}/f/{m['file_id']}"})
-    reply = ChatGroq(model=MODEL, temperature=0).invoke([
-        ("system", SYSTEM),
+    #--------------for local running-------------     
+    # reply = ChatGroq(model=MODEL, temperature=0).invoke([
+    #     ("system", SYSTEM),
+    #     ("human", "Sources:\n\n" + "\n\n".join(blocks) + f"\n\nQuestion: {question}"),
+    # ])
+
+    #----------GCP-----------
+    reply=get_llm().invoke([
+        ("system",SYSTEM),
         ("human", "Sources:\n\n" + "\n\n".join(blocks) + f"\n\nQuestion: {question}"),
     ])
-    text = reply.content
+
+    #------Local----------
+    #text = reply.content
+
+    #---------GCP--------------
+    text=text_of(reply.content)
+    
     # normalise the citation styles models produce (【1】, 【1†L2-L3】) into plain [n]
     text = re.sub(r"【(\d+)†[^】]*】", r"[\1]", text)
     text = re.sub(r"【(\d+)】", r"[\1]", text)

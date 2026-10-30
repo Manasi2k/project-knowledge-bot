@@ -3,7 +3,14 @@ import os
 import re
 
 from dotenv import load_dotenv
-from langchain_groq import ChatGroq
+
+#----------Local-------------
+#from langchain_groq import ChatGroq
+
+
+#----------------GCP------------
+from kb.llm import get_llm,text_of
+
 
 load_dotenv()
 MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
@@ -22,9 +29,17 @@ SMALL_TALK_SYSTEM = (
     "be polite and say you only know the name on their account."
 )
 
+# -------------for local ---------------
+# def _llm() -> ChatGroq:
+#     return ChatGroq(model=MODEL, temperature=0)
 
-def _llm() -> ChatGroq:
-    return ChatGroq(model=MODEL, temperature=0)
+
+#---------------GCP------------------
+def _llm():
+    return get_llm()
+
+
+
 
 
 def condense(history: list[dict], question: str) -> str:
@@ -41,16 +56,23 @@ def condense(history: list[dict], question: str) -> str:
         "Reply with ONLY the rewritten message.\n\n"
         f"Conversation:\n{transcript}\n\nNew message: {question}")
     try:
-        rewritten = _llm().invoke(prompt).content.strip()
+        # ------------------Local--------------------
+        # rewritten = _llm().invoke(prompt).content.strip()
+
+        #--------------------GCP-----------------------
+        rewritten=text_of(_llm().invoke(prompt).content).strip()
+       
         return rewritten if 0 < len(rewritten) <= 500 else question
     except Exception:
         return question          # fall back to the original question
 
 
 def small_talk(question: str, who: str = "an employee") -> str:
-    return _llm().invoke([("system", SMALL_TALK_SYSTEM.format(who=who)), ("human", question)]).content
+    # ----------------For Local---------------------
+    # return _llm().invoke([("system", SMALL_TALK_SYSTEM.format(who=who)), ("human", question)]).content
 
-
+    #--------------------GCP-------------------------
+    return text_of(_llm().invoke([("system", SMALL_TALK_SYSTEM.format(who=who)), ("human", question)]).content)
 
 
 # ---------- questions about the signed-in user, answered from the login, not from documents ----------

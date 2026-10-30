@@ -4,7 +4,14 @@ import os
 from typing import Literal, Optional, TypedDict
 
 from dotenv import load_dotenv
-from langchain_groq import ChatGroq
+
+# --------------Local--------------
+# from langchain_groq import ChatGroq
+
+#----------------GCP---------------
+from kb.llm import structured
+
+
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
@@ -66,27 +73,32 @@ Catalog:
 
 Question: {question}"""
 
+# --------------Local--------------
+# def _llm() -> ChatGroq:
+#     return ChatGroq(model=MODEL, temperature=0)
 
-def _llm() -> ChatGroq:
-    return ChatGroq(model=MODEL, temperature=0)
-
-
-def _structured(schema, prompt: str, attempts: int = 2):
-    """Ask Groq for JSON matching `schema`. JSON mode avoids the tool_use_failed error."""
-    instruction = (prompt + "\n\nReply with ONLY a JSON object matching this JSON schema, no other text:\n"
-                   + json.dumps(schema.model_json_schema()))
-    last_error: Exception | None = None
-    for _ in range(attempts):
-        try:
-            return _llm().with_structured_output(schema, method="json_mode").invoke(instruction)
-        except Exception as exc:
-            last_error = exc
-    raise last_error
+#-------------------Lccal-----------------
+# def _structured(schema, prompt: str, attempts: int = 2):
+#     """Ask Groq for JSON matching `schema`. JSON mode avoids the tool_use_failed error."""
+#     instruction = (prompt + "\n\nReply with ONLY a JSON object matching this JSON schema, no other text:\n"
+#                    + json.dumps(schema.model_json_schema()))
+#     last_error: Exception | None = None
+#     for _ in range(attempts):
+#         try:
+#             return _llm().with_structured_output(schema, method="json_mode").invoke(instruction)
+#         except Exception as exc:
+#             last_error = exc
+#     raise last_error
 
 
 def route_node(state: State) -> State:
     try:
-        decision = _structured(Route, ROUTER_PROMPT.format(question=state["question"]))
+        # ---------------Local---------------------
+        # decision = _structured(Route, ROUTER_PROMPT.format(question=state["question"]))
+        
+        #----------------GCP (here just removed _ )------------
+        decision = structured(Route, ROUTER_PROMPT.format(question=state["question"]))
+
         project = (decision.project or "").strip().replace(" ", "_")   # "Project B" -> "Project_B"
         return {"route": decision.route, "filename": decision.filename or "", "project": project}
     except Exception:
@@ -152,7 +164,13 @@ def spreadsheet_node(state: State, ctx: UserContext) -> State:
         for e in books:
             data[e.path] = ctx.client.download(e.path.removeprefix("Projects/"))   # read as the user
             catalog += [f"{e.path} | {line}" for line in describe(data[e.path])]
-        plan = _structured(SheetPlan, PLANNER_PROMPT.format(catalog="\n".join(catalog), question=state["question"]))
+        
+        # ---------------------Local--------------------
+        # plan = _structured(SheetPlan, PLANNER_PROMPT.format(catalog="\n".join(catalog), question=state["question"]))
+
+
+        #---------------------GCP (here just removed _)--------------------
+        plan = structured(SheetPlan, PLANNER_PROMPT.format(catalog="\n".join(catalog), question=state["question"]))
         if not plan.feasible or plan.workbook not in data:
             return {"answer": "I could not find a spreadsheet column that answers that question."}
         where = {f.column: f.value for f in plan.filters}
