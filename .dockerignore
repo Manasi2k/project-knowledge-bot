@@ -1,0 +1,12 @@
+.git
+.venv
+.env
+__pycache__
+*.pyc
+.pytest_cache
+chroma_db
+chat_history.db
+sync_log.jsonl
+sync_failures.json
+sample_data
+docs

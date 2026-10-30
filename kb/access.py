@@ -78,5 +78,5 @@ def login(username: str, app_password: str) -> UserContext | None:
     if client is None:
         return None
     service = NextcloudClient(settings)
-    return UserContext(username, client, service, allowed_projects(client, service), settings.base_url,
+    return UserContext(username, client, service, allowed_projects(client, service), settings.public_url,
                        fetch_display_name(settings.base_url, username, app_password))

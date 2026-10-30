@@ -2,12 +2,45 @@ services:
   nextcloud:
     image: nextcloud:stable
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     environment:
       NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER}
       NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD}
+      NEXTCLOUD_TRUSTED_DOMAINS: "localhost nextcloud"
     volumes:
       - nextcloud_data:/var/www/html
 
+  app:
+    image: ${KB_IMAGE:-kb-bot:local}
+    build: .
+    ports:
+      - "127.0.0.1:8501:8501"
+    env_file: .env
+    environment:
+      NEXTCLOUD_URL: http://nextcloud               # how the containers reach Nextcloud
+      NEXTCLOUD_PUBLIC_URL: http://localhost:8080   # what browsers use in links
+      TESSERACT_CMD: ""                             # Linux finds Tesseract on its own
+      LLM_PROVIDER: ${DOCKER_LLM_PROVIDER:-groq}    # on the VM set DOCKER_LLM_PROVIDER=vertex
+    volumes:
+      - kb_data:/data
+    depends_on:
+      - nextcloud
+
+  sync:
+    image: ${KB_IMAGE:-kb-bot:local}
+    build: .
+    command: ["python", "-m", "scripts.sync_index", "--watch", "120"]
+    env_file: .env
+    environment:
+      NEXTCLOUD_URL: http://nextcloud
+      NEXTCLOUD_PUBLIC_URL: http://localhost:8080
+      TESSERACT_CMD: ""
+      LLM_PROVIDER: ${DOCKER_LLM_PROVIDER:-groq}
+    volumes:
+      - kb_data:/data
+    depends_on:
+      - nextcloud
+
 volumes:
   nextcloud_data:
+  kb_data:

@@ -11,6 +11,7 @@ class NextcloudSettings:
     base_url: str
     username: str
     app_password: str
+    public_url: str = ""
 
 
 def _require(name: str) -> str:
@@ -21,8 +22,10 @@ def _require(name: str) -> str:
 
 
 def load_nextcloud_settings() -> NextcloudSettings:
+    base_url = _require("NEXTCLOUD_URL").rstrip("/")
     return NextcloudSettings(
-        base_url=_require("NEXTCLOUD_URL").rstrip("/"),
+        base_url=base_url,
         username=_require("NEXTCLOUD_USERNAME"),
         app_password=_require("NEXTCLOUD_APP_PASSWORD"),
+        public_url=os.getenv("NEXTCLOUD_PUBLIC_URL", "").rstrip("/") or base_url,
     )
