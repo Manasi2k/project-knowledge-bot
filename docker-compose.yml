@@ -6,9 +6,12 @@ services:
     environment:
       NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER}
       NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD}
-      NEXTCLOUD_TRUSTED_DOMAINS: "localhost nextcloud"
+      NEXTCLOUD_TRUSTED_DOMAINS: "localhost nextcloud files.${IP_DASHED}.sslip.io"
+      OVERWRITEPROTOCOL: https
+      TRUSTED_PROXIES: "172.16.0.0/12 192.168.0.0/16 10.0.0.0/8"
     volumes:
       - nextcloud_data:/var/www/html
+    restart: unless-stopped
 
   app:
     image: ${KB_IMAGE:-kb-bot:local}
@@ -17,14 +20,15 @@ services:
       - "127.0.0.1:8501:8501"
     env_file: .env
     environment:
-      NEXTCLOUD_URL: http://nextcloud               # how the containers reach Nextcloud
-      NEXTCLOUD_PUBLIC_URL: http://localhost:8080   # what browsers use in links
-      TESSERACT_CMD: ""                             # Linux finds Tesseract on its own
-      LLM_PROVIDER: ${DOCKER_LLM_PROVIDER:-groq}    # on the VM set DOCKER_LLM_PROVIDER=vertex
+      NEXTCLOUD_URL: http://nextcloud
+      NEXTCLOUD_PUBLIC_URL: https://files.${IP_DASHED}.sslip.io
+      TESSERACT_CMD: ""
+      LLM_PROVIDER: ${DOCKER_LLM_PROVIDER:-groq}
     volumes:
       - kb_data:/data
     depends_on:
       - nextcloud
+    restart: unless-stopped
 
   sync:
     image: ${KB_IMAGE:-kb-bot:local}
@@ -33,14 +37,33 @@ services:
     env_file: .env
     environment:
       NEXTCLOUD_URL: http://nextcloud
-      NEXTCLOUD_PUBLIC_URL: http://localhost:8080
+      NEXTCLOUD_PUBLIC_URL: https://files.${IP_DASHED}.sslip.io
       TESSERACT_CMD: ""
       LLM_PROVIDER: ${DOCKER_LLM_PROVIDER:-groq}
     volumes:
       - kb_data:/data
     depends_on:
       - nextcloud
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      IP_DASHED: ${IP_DASHED}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+      - nextcloud
+    restart: unless-stopped
 
 volumes:
   nextcloud_data:
   kb_data:
+  caddy_data:
+  caddy_config:
