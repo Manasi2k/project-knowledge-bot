@@ -90,6 +90,8 @@ Dockerise the app, add a Vertex AI option, deploy to GCP, add SSO and an audit l
 START
 ## Deployment on AWS (EC2) with CI/CD
 
+> Status: the demo environment was deleted after testing. The `deploy` workflow is disabled, and the live URL no longer exists.
+
 The same Docker image runs on an EC2 instance in Mumbai. Caddy fetches free HTTPS certificates, and employees open the site in a browser and sign in with their Nextcloud account.
 
 ```
