@@ -126,4 +126,6 @@ Copy `.env.example` to `.env`, set `GROQ_API_KEY`, then run `docker compose -f d
 
 ![Live chat page](docs/aws-chat.png)
 ![Permission check as bob](docs/aws-permissions.png)
+![CI/CD pipeline](docs/aws-cicd.png)
+![AWS-EC2](docs/aws-ec2.png)
 END
