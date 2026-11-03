@@ -86,3 +86,44 @@ To keep the index up to date: `python -m scripts.sync_index --watch 120`.
 
 ## Roadmap
 Dockerise the app, add a Vertex AI option, deploy to GCP, add SSO and an audit log.
+
+START
+## Deployment on AWS (EC2) with CI/CD
+
+The same Docker image runs on an EC2 instance in Mumbai. Caddy fetches free HTTPS certificates, and employees open the site in a browser and sign in with their Nextcloud account.
+
+```
+git push to aws-deploy
+  -> GitHub Actions: run the tests
+  -> sign in to AWS with a short-lived role (OIDC, no stored keys)
+  -> Systems Manager Run Command: git pull, then docker compose up -d --build
+EC2 (t3.large, Ubuntu 24.04, Elastic IP, security group: 80/443 open, SSH from my IP only)
+  Caddy (HTTPS) -> chat page   https://bot.<ip>.sslip.io
+                -> Nextcloud   https://files.<ip>.sslip.io
+  sync container re-indexes every 2 minutes
+  answers: Amazon Bedrock (Nova 2 Lite) through the instance's IAM role, no API key
+```
+
+### Security choices
+- The instance role may only invoke one Bedrock model, through one inference profile.
+- The GitHub role can only send commands to this one instance. Its trust rule is pinned to this repository and the `aws-deploy` branch.
+- GitHub's OIDC subject contains numeric owner and repository IDs (`repo:owner@id/name@id:ref:...`), so the trust rule must use that exact form. A rule with plain names never matches.
+- A failed `git pull` on the server fails the deploy instead of rebuilding old code.
+- Only ports 80 and 443 are public, and SSH is limited to one IP address.
+
+### Model providers
+The same code runs on Groq, Amazon Bedrock or Google Vertex AI (set `LLM_PROVIDER`). Vertex AI was tested from a laptop on a GCP project, and I did not complete a GCP VM deployment.
+
+### Run it locally with Docker
+Copy `.env.example` to `.env`, set `GROQ_API_KEY`, then run `docker compose -f docker-compose.local.yml up -d --build` and open http://localhost:8501.
+
+### Limits of this deployment
+- A demo with dummy data and a few test accounts. Not a production system.
+- The Bedrock profile is global, so requests may be processed outside India. Use an India profile for real data.
+- The GitHub deploy role can run shell commands on the server as root through Systems Manager, so treat it as root on that server.
+- Sync is polling, so new documents become searchable within about two minutes.
+- The demo instance is deleted after recording, so there is no permanent public URL.
+
+![Live chat page](docs/aws-chat.png)
+![Permission check as bob](docs/aws-permissions.png)
+END
