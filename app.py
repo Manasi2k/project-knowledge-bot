@@ -154,7 +154,7 @@ with st.sidebar:
     if st.session_state.chat_id:
         st.button("🗑 Delete this chat", on_click=remove_chat)
     st.divider()
-    st.caption("Chats are saved for 90 days.")
+    st.caption("Chats are saved for 90 days. Deployed by GitHub Actions.")
     st.button("Sign out", on_click=sign_out)
 
 # ---------- chat ----------
