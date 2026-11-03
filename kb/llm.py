@@ -22,6 +22,13 @@ def get_llm():
             vertexai=True,
             temperature=0,
         )
+    if provider() == "bedrock":
+        from langchain_aws import ChatBedrockConverse
+        return ChatBedrockConverse(
+            model_id=os.environ["BEDROCK_MODEL_ID"],
+            region_name=os.getenv("AWS_REGION", "ap-south-1"),
+            temperature=0,
+        )
     from langchain_groq import ChatGroq
     return ChatGroq(model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"), temperature=0)
 
