@@ -52,7 +52,7 @@ def condense(history: list[dict], question: str) -> str:
     prompt = (
         "Below is a conversation and a new user message. Rewrite the new message as one complete, "
         "standalone message that keeps every project, file and topic the user is referring to. "
-        "If it is already standalone, a greeting, or a thank-you, return it unchanged. "
+        "Only change the new message if it clearly depends on the conversation, for example 'and what about Project C?', 'that file' or 'it'. A new request that makes sense on its own, such as asking for a file or a number, a greeting, or a thank-you, must be returned unchanged, and you must never add a project or file name that the new message does not refer to. "
         "Reply with ONLY the rewritten message.\n\n"
         f"Conversation:\n{transcript}\n\nNew message: {question}")
     try:
