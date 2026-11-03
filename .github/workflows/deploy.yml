@@ -25,6 +25,11 @@ jobs:
       INSTANCE_ID: i-05b134b63602182ce
       SITE: https://bot.13-235-208-122.sslip.io
     steps:
+      - name: Show the OIDC identity GitHub sends (debug)
+        run: |
+          TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | python3 -c "import sys,json; print(json.load(sys.stdin)['value'])")
+          echo "::add-mask::$TOKEN"
+          echo "$TOKEN" | cut -d. -f2 | python3 -c "import sys,base64,json; s=sys.stdin.read().strip(); s+='='*(-len(s)%4); d=json.loads(base64.urlsafe_b64decode(s)); print(json.dumps({k:d[k] for k in ('iss','aud','sub','repository','ref') if k in d}, indent=1))"
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::397450960765:role/github-deploy-kb-bot
