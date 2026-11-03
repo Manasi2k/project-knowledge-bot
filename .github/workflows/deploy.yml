@@ -1,0 +1,55 @@
+name: deploy
+on:
+  push:
+    branches: [aws-deploy]
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest requests python-dotenv
+      - run: python -m pytest -q
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      INSTANCE_ID: i-05b134b63602182ce
+      SITE: https://bot.13-235-208-122.sslip.io
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::397450960765:role/github-deploy-kb-bot
+          aws-region: ap-south-1
+      - name: Update the server
+        run: |
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "deploy ${GITHUB_SHA::7}" \
+            --parameters 'commands=["sudo -u ubuntu git -C /home/ubuntu/kb-bot pull","cd /home/ubuntu/kb-bot && docker compose up -d --build app sync"]' \
+            --query "Command.CommandId" --output text)
+          echo "Command: $CMD_ID"
+          STATUS=Pending
+          for i in $(seq 1 120); do
+            STATUS=$(aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" --query Status --output text 2>/dev/null || echo Pending)
+            echo "[$i] $STATUS"
+            case "$STATUS" in Success|Failed|Cancelled|TimedOut) break ;; esac
+            sleep 15
+          done
+          aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" --query StandardOutputContent --output text | tail -20 || true
+          if [ "$STATUS" != "Success" ]; then
+            aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" --query StandardErrorContent --output text | tail -20 || true
+            echo "Deploy did not succeed: $STATUS"
+            exit 1
+          fi
+      - name: Check the site is up
+        run: curl -fsS -L -o /dev/null --retry 8 --retry-delay 10 --retry-connrefused "$SITE"
